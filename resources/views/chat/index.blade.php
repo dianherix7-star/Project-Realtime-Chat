@@ -5,6 +5,7 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <title>ChatApp</title>
 <script src="https://cdn.tailwindcss.com"></script>
+@vite(['resources/js/app.js'])
 </head>
 <body class="bg-gray-900 h-screen flex overflow-hidden text-white">
 <aside class="w-72 bg-gray-800 flex flex-col border-r border-gray-700">
@@ -26,7 +27,7 @@
     <div class="p-3 border-b border-gray-700">
         <button type="button" onclick="document.getElementById('modal-create').classList.remove('hidden')" class="w-full bg-indigo-600 hover:bg-indigo-700 py-2 rounded-lg text-sm font-medium transition">+ Buat Room Baru</button>
     </div>
-    <div class="flex-1 overflow-y-auto p-2">
+    <div class="flex-1 overflow-y-auto p-2" id="room-list">
         <p class="text-xs text-gray-500 uppercase px-2 mb-2">Ruang Chat</p>
         @forelse($rooms as $room)
         @php
@@ -58,11 +59,14 @@
         <p class="text-xs text-gray-500 uppercase mb-2">Semua User</p>
         <div class="space-y-1 max-h-36 overflow-y-auto">
             @foreach($users as $user)
-            <div class="flex items-center gap-2 px-2 py-1">
-                <span class="w-2 h-2 rounded-full {{ $user->is_online ? 'bg-green-400' : 'bg-gray-500' }}"></span>
-                <span class="text-sm text-gray-300">{{ $user->name }}</span>
-                <span class="text-xs ml-auto {{ $user->is_online ? 'text-green-400' : 'text-gray-500' }}">{{ $user->is_online ? 'Online' : 'Offline' }}</span>
-            </div>
+            <button type="button"
+                onclick="openDirectChatWith({{ $user->id }}, '{{ addslashes($user->name) }}')"
+                class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-700 transition text-left cursor-pointer group"
+                title="Chat pribadi dengan {{ $user->name }}">
+                <span class="w-2 h-2 rounded-full flex-shrink-0 {{ $user->is_online ? 'bg-green-400' : 'bg-gray-500' }}"></span>
+                <span class="text-sm text-gray-300 flex-1 group-hover:text-white transition">{{ $user->name }}</span>
+                <span class="text-xs {{ $user->is_online ? 'text-green-400' : 'text-gray-500' }}">{{ $user->is_online ? 'Online' : 'Offline' }}</span>
+            </button>
             @endforeach
         </div>
     </div>
@@ -78,6 +82,11 @@
             <div>
                 <h2 class="font-bold" id="room-title">Room</h2>
                 <p class="text-xs text-gray-400" id="room-type-label"></p>
+            </div>
+            {{-- Indikator koneksi WebSocket --}}
+            <div class="ml-auto flex items-center gap-1.5">
+                <span id="ws-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
+                <span id="ws-label" class="text-xs text-gray-500">Menghubungkan...</span>
             </div>
         </div>
         <div id="messages" class="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-900"></div>
@@ -124,33 +133,113 @@
 </div>
 <script>
 const currentUserId = {{ auth()->id() }};
-let currentRoomId = null;
-let lastMessageId = 0;
-let pollTimer = null;
+let currentRoomId   = null;
+let lastMessageId   = 0;
+let pollTimer       = null;
+let echoChannel     = null;
+let wsConnected     = false;
 
+// ─── Indikator WebSocket ─────────────────────────────────────────────────────
+function setWsStatus(status) {
+    const dot   = document.getElementById('ws-dot');
+    const label = document.getElementById('ws-label');
+    if (!dot) return;
+    if (status === 'connected') {
+        dot.className   = 'w-2 h-2 rounded-full bg-green-400';
+        label.textContent = 'Realtime';
+        label.className   = 'text-xs text-green-400';
+        wsConnected = true;
+    } else if (status === 'connecting') {
+        dot.className   = 'w-2 h-2 rounded-full bg-yellow-400 animate-pulse';
+        label.textContent = 'Menghubungkan...';
+        label.className   = 'text-xs text-yellow-400';
+        wsConnected = false;
+    } else {
+        dot.className   = 'w-2 h-2 rounded-full bg-gray-500';
+        label.textContent = 'Polling';
+        label.className   = 'text-xs text-gray-500';
+        wsConnected = false;
+    }
+}
+
+// ─── Buka room ───────────────────────────────────────────────────────────────
 function openRoom(btn) {
-    currentRoomId = btn.dataset.roomId;
+    const newRoomId = btn.dataset.roomId;
+
+    // Lepas channel lama
+    leaveEchoChannel();
+
+    currentRoomId = newRoomId;
     document.getElementById('chat-placeholder').classList.add('hidden');
     document.getElementById('chat-area').classList.remove('hidden');
-    document.getElementById('room-title').textContent = btn.dataset.roomName;
+    document.getElementById('room-title').textContent      = btn.dataset.roomName;
     document.getElementById('room-type-label').textContent = btn.dataset.roomType === 'group' ? '👥 Group Chat' : '💬 Private Chat';
-    document.getElementById('room-icon').textContent = btn.dataset.roomType === 'group' ? '👥' : '💬';
+    document.getElementById('room-icon').textContent       = btn.dataset.roomType === 'group' ? '👥' : '💬';
     document.querySelectorAll('.room-btn').forEach(b => b.classList.remove('bg-gray-700'));
     btn.classList.add('bg-gray-700');
+
     lastMessageId = 0;
     loadMessages(true);
+
+    // Coba sambung Echo WebSocket
+    joinEchoChannel(currentRoomId);
+
+    // Polling sebagai fallback (lebih cepat jika WS tidak tersedia)
     startPolling();
 }
 
+// ─── Laravel Echo / Reverb ───────────────────────────────────────────────────
+function joinEchoChannel(roomId) {
+    if (typeof window.Echo === 'undefined') {
+        setWsStatus('offline');
+        return;
+    }
+
+    setWsStatus('connecting');
+
+    try {
+        echoChannel = window.Echo.join('chat-room.' + roomId)
+            .here(() => { setWsStatus('connected'); })
+            .joining(() => {})
+            .leaving(() => {})
+            .listen('MessageSent', (data) => {
+                // Pesan masuk via WebSocket — tampilkan langsung!
+                if (!document.querySelector('[data-msg-id="' + data.id + '"]')) {
+                    appendMessage(data);
+                    lastMessageId = Math.max(lastMessageId, data.id);
+                    scrollToBottom();
+                }
+            })
+            .error(() => { setWsStatus('offline'); });
+    } catch (e) {
+        setWsStatus('offline');
+    }
+}
+
+function leaveEchoChannel() {
+    if (echoChannel && window.Echo) {
+        try { window.Echo.leave('chat-room.' + currentRoomId); } catch(e) {}
+        echoChannel = null;
+    }
+    setWsStatus('connecting');
+}
+
+// ─── Polling fallback ────────────────────────────────────────────────────────
 function startPolling() {
     stopPolling();
-    pollTimer = setInterval(() => loadMessages(false), 3000);
+    // Jika WS tersambung, polling lebih jarang (sebagai safety net)
+    // Jika WS tidak ada, polling lebih cepat (1.5 detik)
+    const interval = wsConnected ? 10000 : 1500;
+    pollTimer = setInterval(() => {
+        if (!wsConnected) loadMessages(false);
+    }, interval);
 }
 
 function stopPolling() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 
+// ─── Load pesan ──────────────────────────────────────────────────────────────
 async function loadMessages(initial) {
     if (!currentRoomId) return;
     const url = initial
@@ -171,11 +260,12 @@ async function loadMessages(initial) {
     } catch (e) { console.error(e); }
 }
 
+// ─── Kirim pesan ─────────────────────────────────────────────────────────────
 async function sendMessage() {
     const input = document.getElementById('message-input');
-    const body = input.value.trim();
+    const body  = input.value.trim();
     if (!body || !currentRoomId) return;
-    input.value = '';
+    input.value    = '';
     input.disabled = true;
     try {
         const res = await fetch('/chat/rooms/' + currentRoomId + '/messages', {
@@ -187,13 +277,15 @@ async function sendMessage() {
             },
             body: JSON.stringify({ body }),
         });
-        if (!res.ok) { alert('Gagal mengirim pesan.'); input.value = body; return; }
+        if (!res.ok) { input.value = body; return; }
         const msg = await res.json();
-        appendMessage(msg);
-        lastMessageId = Math.max(lastMessageId, msg.id);
-        scrollToBottom();
+        // Tampilkan langsung untuk pengirim
+        if (!document.querySelector('[data-msg-id="' + msg.id + '"]')) {
+            appendMessage(msg);
+            lastMessageId = Math.max(lastMessageId, msg.id);
+            scrollToBottom();
+        }
     } catch (e) {
-        alert('Gagal mengirim pesan.');
         input.value = body;
     } finally {
         input.disabled = false;
@@ -201,23 +293,27 @@ async function sendMessage() {
     }
 }
 
+// ─── Render pesan ────────────────────────────────────────────────────────────
 function appendMessage(msg) {
     if (document.querySelector('[data-msg-id="' + msg.id + '"]')) return;
     const isMine = msg.user_id === currentUserId;
-    const el = document.createElement('div');
-    el.className = 'flex ' + (isMine ? 'justify-end' : 'justify-start');
+    const el     = document.createElement('div');
+    el.className    = 'flex ' + (isMine ? 'justify-end' : 'justify-start');
     el.dataset.msgId = msg.id;
-    el.innerHTML = '<div class="max-w-xs lg:max-w-md">' +
+    el.innerHTML =
+        '<div class="max-w-xs lg:max-w-md">' +
         (!isMine ? '<p class="text-xs text-gray-400 mb-1 ml-1">' + escapeHtml(msg.user_name) + '</p>' : '') +
         '<div class="' + (isMine ? 'bg-indigo-600' : 'bg-gray-700') + ' px-4 py-2 rounded-2xl"><p class="text-sm">' + escapeHtml(msg.body) + '</p></div>' +
         '<p class="text-xs text-gray-500 mt-1 ' + (isMine ? 'text-right' : 'text-left') + ' mx-1">' +
-        new Date(msg.created_at).toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit'}) + '</p></div>';
+        new Date(msg.created_at).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) +
+        '</p></div>';
     document.getElementById('messages').appendChild(el);
 }
 
+// ─── Buat room ───────────────────────────────────────────────────────────────
 async function createRoom() {
-    const name = document.getElementById('new-room-name').value.trim();
-    const type = document.getElementById('new-room-type').value;
+    const name    = document.getElementById('new-room-name').value.trim();
+    const type    = document.getElementById('new-room-type').value;
     const userIds = Array.from(document.querySelectorAll('.member-check:checked')).map(c => parseInt(c.value));
     if (!name || userIds.length === 0) { alert('Isi nama room dan pilih minimal 1 member!'); return; }
     const res = await fetch('/chat/rooms', {
@@ -229,6 +325,55 @@ async function createRoom() {
     else alert('Gagal membuat room.');
 }
 
+// ─── Direct chat ─────────────────────────────────────────────────────────────
+async function openDirectChatWith(userId, userName) {
+    try {
+        const res = await fetch('/chat/direct/' + userId, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+            },
+        });
+        if (!res.ok) { alert('Gagal membuka chat.'); return; }
+        const room = await res.json();
+
+        // Jika room sudah ada di sidebar, aktifkan langsung
+        const existingBtn = document.getElementById('room-btn-' + room.id);
+        if (existingBtn) { openRoom(existingBtn); return; }
+
+        // Buat tombol sementara di sidebar
+        const roomList = document.getElementById('room-list');
+        if (roomList) {
+            const newBtn = document.createElement('button');
+            newBtn.type      = 'button';
+            newBtn.className = 'room-btn w-full text-left px-3 py-3 rounded-lg hover:bg-gray-700 transition mb-1';
+            newBtn.id        = 'room-btn-' + room.id;
+            newBtn.dataset.roomId   = room.id;
+            newBtn.dataset.roomName = room.name;
+            newBtn.dataset.roomType = 'private';
+            newBtn.onclick   = function() { openRoom(this); };
+            newBtn.innerHTML = `<div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-xs">💬</div>
+                <div>
+                    <p class="text-sm font-medium">${escapeHtml(room.name)}</p>
+                    <p class="text-xs text-gray-400">private</p>
+                </div>
+            </div>`;
+            // Sisipkan setelah judul "Ruang Chat"
+            const firstRoom = roomList.querySelector('.room-btn');
+            firstRoom ? roomList.insertBefore(newBtn, firstRoom) : roomList.appendChild(newBtn);
+        }
+
+        openRoom(document.getElementById('room-btn-' + room.id));
+    } catch (e) {
+        console.error(e);
+        alert('Terjadi kesalahan.');
+    }
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 function scrollToBottom() {
     const m = document.getElementById('messages');
     m.scrollTop = m.scrollHeight;
@@ -240,7 +385,10 @@ function escapeHtml(text) {
     return d.innerHTML;
 }
 
-window.addEventListener('beforeunload', stopPolling);
+window.addEventListener('beforeunload', () => {
+    stopPolling();
+    leaveEchoChannel();
+});
 </script>
 </body>
 </html>

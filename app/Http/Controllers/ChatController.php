@@ -59,7 +59,13 @@ class ChatController extends Controller
         $message->load('user');
 
         // Dispatch event untuk broadcasting realtime
-        MessageSent::dispatch($message);
+        // Dibungkus try-catch agar jika Reverb server tidak aktif,
+        // pesan tetap berhasil dikirim dan disimpan
+        try {
+            MessageSent::dispatch($message);
+        } catch (\Throwable $e) {
+            \Log::warning('Broadcasting gagal (Reverb mungkin tidak aktif): ' . $e->getMessage());
+        }
 
         return response()->json($this->formatMessage($message));
     }
@@ -81,6 +87,40 @@ class ChatController extends Controller
         $room->users()->attach($userIds);
 
         return response()->json($room->load('users'));
+    }
+
+    public function openDirectChat($userId)
+    {
+        $targetUser = User::findOrFail($userId);
+        $myId       = Auth::id();
+
+        // Cari private room yang sudah ada antara dua user ini
+        $existingRoom = ChatRoom::where('type', 'private')
+            ->whereHas('users', fn ($q) => $q->where('users.id', $myId))
+            ->whereHas('users', fn ($q) => $q->where('users.id', $targetUser->id))
+            ->withCount('users')
+            ->having('users_count', 2)
+            ->first();
+
+        if ($existingRoom) {
+            $room = $existingRoom->load('users');
+        } else {
+            // Buat room baru
+            $room = ChatRoom::create([
+                'name' => 'Private: ' . Auth::user()->name . ' & ' . $targetUser->name,
+                'type' => 'private',
+            ]);
+            $room->users()->attach([$myId, $targetUser->id]);
+            $room->load('users');
+        }
+
+        $displayName = $targetUser->name;
+
+        return response()->json([
+            'id'           => $room->id,
+            'name'         => $displayName,
+            'type'         => 'private',
+        ]);
     }
 
     private function userInRoom(ChatRoom $room): bool
