@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Masuk - ChatApp</title>
+    <title>SumaAPP</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -35,17 +35,8 @@
             margin-bottom: 2rem;
         }
 
-        .logo-icon {
-            width: 36px;
-            height: 36px;
-            background: linear-gradient(135deg, #6366f1, #8b5cf6);
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
 
-        .logo-icon svg { width: 18px; height: 18px; fill: white; }
+ 
 
         .logo-text {
             font-size: 1.1rem;
@@ -104,7 +95,7 @@
 
         .btn {
             width: 100%;
-            background: #6366f1;
+            background: #2ca43c;
             color: #fff;
             font-family: 'Inter', sans-serif;
             font-size: 0.9rem;
@@ -117,7 +108,7 @@
             transition: background 0.2s;
         }
 
-        .btn:hover { background: #5254cc; }
+        .btn:hover { background: #2ca43c; }
 
         .footer-text {
             text-align: center;
@@ -139,14 +130,12 @@
     <div class="card">
         <div class="logo">
             <div class="logo-icon">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/>
-                </svg>
+            
             </div>
-            <span class="logo-text">ChatApp</span>
+            <span class="logo-text">SumaAPP✉️</span>
         </div>
 
-        <h1>Selamat datang</h1>
+        <h1>Welcome to SumaAPP</h1>
         <p class="subtitle">Masuk ke akun Anda</p>
 
         @if($errors->any())
@@ -167,7 +156,7 @@
         </form>
 
         <p class="footer-text">
-            Belum punya akun? <a href="/register">Daftar</a>
+            HAHAHAHAHAHA belum punya akun <a href="/register">Daftar</a>
         </p>
     </div>
 </body>

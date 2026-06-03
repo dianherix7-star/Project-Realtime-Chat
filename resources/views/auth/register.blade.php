@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Daftar - ChatApp</title>
+    <title>Daftar - SumaAPP</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -45,7 +45,6 @@
             justify-content: center;
         }
 
-        .logo-icon svg { width: 18px; height: 18px; fill: white; }
 
         .logo-text {
             font-size: 1.1rem;
@@ -106,7 +105,7 @@
 
         .btn {
             width: 100%;
-            background: #6366f1;
+            background: #2ca43c;
             color: #fff;
             font-family: 'Inter', sans-serif;
             font-size: 0.9rem;
@@ -119,7 +118,7 @@
             transition: background 0.2s;
         }
 
-        .btn:hover { background: #5254cc; }
+        .btn:hover { background: #2ca43c; }
 
         .footer-text {
             text-align: center;
@@ -140,16 +139,11 @@
 <body>
     <div class="card">
         <div class="logo">
-            <div class="logo-icon">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/>
-                </svg>
-            </div>
-            <span class="logo-text">ChatApp</span>
+            <span class="logo-text">SumaAPP✉️</span>
         </div>
 
         <h1>Buat akun</h1>
-        <p class="subtitle">Bergabung sekarang, gratis!</p>
+        <p class="subtitle">Bergabung sekarang</p>
 
         @if($errors->any())
             <div class="error-box">

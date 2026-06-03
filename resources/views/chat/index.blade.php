@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<title>ChatApp</title>
+<title>SumaAPP</title>
 <script src="https://cdn.tailwindcss.com"></script>
 @vite(['resources/js/app.js'])
 </head>
 <body class="bg-gray-900 h-screen flex overflow-hidden text-white">
-<aside class="w-72 bg-gray-800 flex flex-col border-r border-gray-700">
+<aside class="w-72 bg-slate flex flex-col border-r border-green-200">
     <div class="p-4 border-b border-gray-700 flex items-center justify-between">
         <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-lg">
@@ -25,10 +25,10 @@
         </form>
     </div>
     <div class="p-3 border-b border-gray-700">
-        <button type="button" onclick="document.getElementById('modal-create').classList.remove('hidden')" class="w-full bg-indigo-600 hover:bg-indigo-700 py-2 rounded-lg text-sm font-medium transition">+ Buat Room Baru</button>
+        <button type="button" onclick="document.getElementById('modal-create').classList.remove('hidden')" class="w-full bg-green-600 hover:bg-indigo-700 py-2 rounded-lg text-sm font-medium transition">+ Buat Room Baru</button>
     </div>
     <div class="flex-1 overflow-y-auto p-2" id="room-list">
-        <p class="text-xs text-gray-500 uppercase px-2 mb-2">Ruang Chat</p>
+        <p class="text-xs text-gray-500 uppercase px-2 mb-2">Chat</p>
         @forelse($rooms as $room)
         @php
         $displayName = $room->type === 'private'
@@ -43,7 +43,7 @@
             onclick="openRoom(this)">
             <div class="flex items-center gap-3">
                 <div class="w-9 h-9 rounded-full {{ $room->type === 'group' ? 'bg-purple-600' : 'bg-blue-600' }} flex items-center justify-center text-xs">
-                    {{ $room->type === 'group' ? '👥' : '💬' }}
+                    {{ $room->type === 'group' ? '🎭' : '😉' }}
                 </div>
                 <div>
                     <p class="text-sm font-medium">{{ $displayName }}</p>
@@ -56,7 +56,7 @@
         @endforelse
     </div>
     <div class="p-3 border-t border-gray-700">
-        <p class="text-xs text-gray-500 uppercase mb-2">Semua User</p>
+        <p class="text-xs text-gray-500 uppercase mb-2">Semua Warga</p>
         <div class="space-y-1 max-h-36 overflow-y-auto">
             @foreach($users as $user)
             <button type="button"
@@ -73,7 +73,7 @@
 </aside>
 <main class="flex-1 flex flex-col">
     <div id="chat-placeholder" class="flex-1 flex items-center justify-center flex-col gap-4">
-        <div class="text-6xl">💬</div>
+        <div class="text-6xl">🥡</div>
         <h2 class="text-2xl font-bold text-gray-300">Pilih Room untuk Mulai Chat</h2>
     </div>
     <div id="chat-area" class="hidden flex-1 flex flex-col">
@@ -93,7 +93,7 @@
         <div class="p-4 bg-gray-800 border-t border-gray-700">
             <div class="flex gap-3">
                 <input type="text" id="message-input" placeholder="Ketik pesan..." class="flex-1 bg-gray-700 text-white px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" onkeydown="if(event.key==='Enter') sendMessage()">
-                <button type="button" onclick="sendMessage()" class="bg-indigo-600 hover:bg-indigo-700 px-6 py-3 rounded-xl font-medium transition">Kirim</button>
+                <button type="button" onclick="sendMessage()" class="bg-green-600 hover:bg-indigo-700 px-6 py-3 rounded-xl font-medium transition">Kirim</button>
             </div>
         </div>
     </div>
@@ -109,8 +109,8 @@
             <div>
                 <label class="block text-gray-400 text-sm mb-1">Tipe</label>
                 <select id="new-room-type" class="w-full bg-gray-700 text-white px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    <option value="group">Group Chat</option>
-                    <option value="private">Private Chat</option>
+                    <option value="group">Group</option>
+                    <option value="private">Pribadi</option>
                 </select>
             </div>
             <div>
@@ -125,7 +125,7 @@
                 </div>
             </div>
             <div class="flex gap-3">
-                <button type="button" onclick="createRoom()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 py-3 rounded-lg font-medium transition">Buat Room</button>
+                <button type="button" onclick="createRoom()" class="flex-1 bg-green-600 hover:bg-indigo-700 py-3 rounded-lg font-medium transition">Buat Room</button>
                 <button type="button" onclick="document.getElementById('modal-create').classList.add('hidden')" class="flex-1 bg-gray-700 hover:bg-gray-600 py-3 rounded-lg font-medium transition">Batal</button>
             </div>
         </div>
@@ -146,12 +146,12 @@ function setWsStatus(status) {
     if (!dot) return;
     if (status === 'connected') {
         dot.className   = 'w-2 h-2 rounded-full bg-green-400';
-        label.textContent = 'Realtime';
+        label.textContent = 'Online';
         label.className   = 'text-xs text-green-400';
         wsConnected = true;
     } else if (status === 'connecting') {
         dot.className   = 'w-2 h-2 rounded-full bg-yellow-400 animate-pulse';
-        label.textContent = 'Menghubungkan...';
+        label.textContent = 'Offline';
         label.className   = 'text-xs text-yellow-400';
         wsConnected = false;
     } else {
@@ -173,8 +173,8 @@ function openRoom(btn) {
     document.getElementById('chat-placeholder').classList.add('hidden');
     document.getElementById('chat-area').classList.remove('hidden');
     document.getElementById('room-title').textContent      = btn.dataset.roomName;
-    document.getElementById('room-type-label').textContent = btn.dataset.roomType === 'group' ? '👥 Group Chat' : '💬 Private Chat';
-    document.getElementById('room-icon').textContent       = btn.dataset.roomType === 'group' ? '👥' : '💬';
+    document.getElementById('room-type-label').textContent = btn.dataset.roomType === 'group' ? '🎭 Group Chat' : '😉 Pribadi Chat';
+    document.getElementById('room-icon').textContent       = btn.dataset.roomType === 'group' ? '🎭' : '😉';
     document.querySelectorAll('.room-btn').forEach(b => b.classList.remove('bg-gray-700'));
     btn.classList.add('bg-gray-700');
 
